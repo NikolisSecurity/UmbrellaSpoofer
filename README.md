@@ -74,22 +74,9 @@ UmbrellaSpoofer/
   app.manifest
 ```
 
-## 🚀 Publishing
-Create a GitHub-ready release package:
-
-```bash
-dotnet publish .\UmbrellaSpoofer\UmbrellaSpoofer.csproj -c Release -r win-x64 --self-contained false
-```
-
-Then zip the publish folder and name it `latest.zip`:
-
-```
-UmbrellaSpoofer\bin\Release\net8.0-windows\win-x64\publish\
-```
-
 Recommended release artifacts:
-- latest.zip containing the published app
-- Optional SHA256 checksum file (latest.zip.sha256)
+- latest.rar containing the published app
+- Optional SHA256 checksum file (latest.rar.sha256)
 
 ## ❓ FAQ
 - Does this bypass anti-cheat? No guarantees. Use responsibly and respect TOS.
