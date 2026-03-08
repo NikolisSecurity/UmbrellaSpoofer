@@ -2,7 +2,7 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 18
 VisualStudioVersion = 18.1.11312.151 d18.0
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "UmbrellaSpoofer", "AnatolySpoofer\UmbrellaSpoofer.csproj", "{4A6E9816-7E89-4E9A-9A0E-57A9B2F5C32C}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "UmbrellaSpoofer", "UmbrellaSpoofer\UmbrellaSpoofer.csproj", "{4A6E9816-7E89-4E9A-9A0E-57A9B2F5C32C}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
