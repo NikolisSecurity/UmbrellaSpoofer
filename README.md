@@ -1,98 +1,112 @@
-# 🛡️ PhantomID v2.5 — Hardware ID Spoofer
+# 🛡️ Umbrella Spoofer — Hardware Identity Manager
 
 <p align="center">
   <img src="https://img.shields.io/badge/Platform-Windows-blue?style=for-the-badge&logo=windows" alt="Platform">
-  <img src="https://img.shields.io/badge/Language-Python-yellow?style=for-the-badge&logo=python" alt="Language">
+  <img src="https://img.shields.io/badge/Language-C%23-512BD4?style=for-the-badge&logo=csharp" alt="Language">
+  <img src="https://img.shields.io/badge/Framework-.NET%208-512BD4?style=for-the-badge&logo=dotnet" alt="Framework">
 </p>
 
-
 <p align="center">
-  <img src="https://img.shields.io/github/stars/NikolisSecurity/PhantomID?style=social">
-  <img src="https://img.shields.io/github/v/release/NikolisSecurity/PhantomID">
-  <img src="https://img.shields.io/github/downloads/NikolisSecurity/PhantomID/total">
+  <img src="https://img.shields.io/github/stars/NikolisSecurity/UmbrellaSpoofer?style=social">
+  <img src="https://img.shields.io/github/v/release/NikolisSecurity/UmbrellaSpoofer">
+  <img src="https://img.shields.io/github/downloads/NikolisSecurity/UmbrellaSpoofer/total">
   <a href="https://discord.gg/rfWdrewbAz" target="_blank">
     <img src="https://img.shields.io/badge/Discord-Join%20Server-7289DA?logo=discord&logoColor=white" alt="Join our Discord">
   </a>
 </p>
 
 ## 📋 Overview
-PhantomID is a Windows hardware ID spoofing toolkit focused on safe, reversible changes. It provides Temp and Perma modes, per‑game spoofing, and a modern PySide6 UI.
-
-**What’s New in v2**
-- Spoof Mode: Temp or Perma — switch in Settings.
-- Win10 compatibility with robust path and registry handling.
-- Monitor serial overrides (reported values) and improved RAM serial detection (PowerShell CIM fallback).
-- Safer MAC + HWID spoofing with automatic backup, verification, and Temp revert scheduling.
-- Unified themed popups; two UI themes:
-  - Black/Red (Temp)
-  - Neon Dark (Perma) with cyan accents
-- Cleaner Game Spoofing UI (logo‑only buttons, no progress bar).
-- Build script to generate a single `PhantomID.exe` via PyInstaller.
+Umbrella Spoofer is a Windows desktop application for managing and masking hardware identity values, with system inventory, history tracking, and update support.
 
 ## ✨ Features
-- Spoof Mode: Temp or Perma
-- Spoof MAC Address (NIC `NetworkAddress`) with adapter restart
-- Spoof Hardware ID (MachineGuid)
-- Spoof IP Address (DHCP renew / static when safe)
-- Reported SeriaSerial Overl Overrides: BIOS/CPU/Processor/OS/EFI (non‑destructive)
-- Monitor rides (reported via serial checker)
-- System Serial Checker with Win11 RAM serial fallback
-- Per‑game spoofers: FiveM, Fortnite, Valorant, Minecraft, Roblox, CS:GO/CS2
-- Backups, history database, and auto‑updater
+- Hardware inventory view with live identifiers
+- Masked preview generation before apply
+- History and backup tracking
+- Tray integration
+- Discord Rich Presence integration
+- Configurable update checks
 
 ## 🔧 Requirements
-- Windows 10
-- Python 3.8+
-- Required Python packages:
-  - PySide6
-  - requests
-  - wmi
-  - pywin32
-  - sqlite3 (included with Python)
+- Windows 10/11
+- .NET 8 Desktop Runtime or SDK
+- Administrator privileges (for hardware identity operations)
 
 ## 📥 Installation
-1. Clone or download this repository:
+1. Download the latest release (recommended):
+
+[![Download latest.zip](https://img.shields.io/badge/Download-latest.zip-00A6FF?style=for-the-badge&logo=github)](https://github.com/NikolisSecurity/UmbrellaSpoofer/releases/latest/download/latest.zip)
+
+2. Clone the repository:
 
 ```bash
-git clone https://github.com/NikolisSecurity/PhantomID.git
+git clone https://github.com/NikolisSecurity/UmbrellaSpoofer.git
 ```
 
-2. Install required packages:
+3. Build:
 
 ```bash
-pip install -r requirements.txt
- ```
+dotnet build
+```
 
-3. Run the application:
+4. Run:
 
 ```bash
-python spoofer.py
- ```
+dotnet run
+```
+
+## ⚙️ Configuration
+
+### Discord Presence
+Discord settings are stored in the local SQLite database and can be configured via the UI.
+
+## 🧱 Project Structure
+```
+UmbrellaSpoofer/
+  assets/
+  UI/
+  Services/
+  Data/
+  App.xaml
+  App.xaml.cs
+  Program.cs
+  TrayService.cs
+  updater.json
+  app.manifest
+```
+
+## 🚀 Publishing
+Create a GitHub-ready release package:
+
+```bash
+dotnet publish .\UmbrellaSpoofer\UmbrellaSpoofer.csproj -c Release -r win-x64 --self-contained false
+```
+
+Then zip the publish folder and name it `latest.zip`:
+
+```
+UmbrellaSpoofer\bin\Release\net8.0-windows\win-x64\publish\
+```
+
+Recommended release artifacts:
+- latest.zip containing the published app
+- Optional SHA256 checksum file (latest.zip.sha256)
 
 ## ❓ FAQ
-- Does this bypass anti‑cheat? No guarantees. Use responsibly and respect TOS.
-- Temp vs Perma?
-  - Temp: Creates a restore script and startup hook; reverts MAC/HWID after reboot.
-  - Perma: Applies changes and switches the UI to Neon Dark.
-- Win11 support?
-  - _No. Win11 paths and registry exports are not supported._
-- Will this harm my PC?
-  - Spoofs are guarded, logged, and backed up. Always create a system restore point.
+- Does this bypass anti-cheat? No guarantees. Use responsibly and respect TOS.
+- Will this harm my PC? Changes should be used with care and proper backups.
+
 ## ⚠️ Warning
 - Use this tool responsibly and at your own risk
 - Modifying hardware identifiers may affect system functionality
 - Some changes require administrator privileges
 - Always create a system restore point before making changes
+
 ## 🔍 Troubleshooting
-- Run as administrator for MAC/HWID changes and Temp startup hook creation.
-- Temp revert verification:
-  - Script: `backups/registry/phantomid_restore.cmd` contains reg commands and `exit /b 0`.
-  - Startup hook: Task Scheduler `PhantomID_TempRestore` (admin) or HKCU Run value.
-- RAM serials on Win11: if WMI is empty, PowerShell CIM fallback fills serials.
-- If a spoof fails, use “Restore Original” or Dry Run first to preview changes.
+- Run as administrator for hardware identifier operations
+- If update checks fail, verify updater.json is configured with a valid owner/repo
 
 ## 📜 License
-This software is provided as-is without any warranty. Use at your own risk.
+See LICENSE.
 
 ## 📞 Contact
 For issues or feature requests, please open an issue on the GitHub repository.
