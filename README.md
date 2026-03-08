@@ -34,7 +34,7 @@ Umbrella Spoofer is a Windows desktop application for managing and masking hardw
 ## 📥 Installation
 1. Download the latest release (recommended):
 
-[![Download latest.rar](https://img.shields.io/badge/Download-latest.zip-00A6FF?style=for-the-badge&logo=github)](https://github.com/NikolisSecurity/UmbrellaSpoofer/releases/latest/download/latest.rar)
+[![Download latest.rar](https://img.shields.io/badge/Download-latest.rar-00A6FF?style=for-the-badge&logo=github)](https://github.com/NikolisSecurity/UmbrellaSpoofer/releases/latest/download/latest.rar)
 
 2. Clone the repository:
 
