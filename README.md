@@ -51,7 +51,7 @@ dotnet build
 4. Run:
 
 ```bash
-dotnet run
+dotnet run --project .\UmbrellaSpoofer\UmbrellaSpoofer.csproj
 ```
 
 ## ⚙️ Configuration
