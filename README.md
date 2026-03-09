@@ -18,6 +18,11 @@
 ## 📋 Overview
 Umbrella Spoofer is a Windows desktop application for managing and masking hardware identity values, with system inventory, history tracking, and update support.
 
+## 🎯 Goals
+
+- 75 🌟 Next Update
+- 125 🌟 Develop Kernel Level Spoofing 
+
 ## ✨ Features
 - Hardware inventory view with live identifiers
 - Masked preview generation before apply
