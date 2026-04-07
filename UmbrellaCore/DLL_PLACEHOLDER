@@ -1,8 +1,0 @@
-# UmbrellaCore.dll
-
-This directory is excluded from version control.
-The compiled DLL is included in UmbrellaSpoofer/lib/UmbrellaCore.dll.
-
-To build locally:
-  1. Clone with the UmbrellaCore source included
-  2. Or place a pre-built UmbrellaCore.dll in lib/
