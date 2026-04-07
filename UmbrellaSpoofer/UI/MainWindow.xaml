@@ -427,6 +427,7 @@
                                     </StackPanel>
                                 </ScrollViewer>
                                 <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0 24 0 0">
+                                    <Button x:Name="RestoreOriginslBtn" Content="Restore Originals" Style="{DynamicResource SubtleButton}" Width="140" Margin="0 0 12 0" Click="RestoreOriginalsBtn_Click"/>
                                     <Button x:Name="RestoreBtn" Content="Restore Backup" Style="{DynamicResource SubtleButton}" Width="140" Margin="0 0 12 0" Click="RestoreBtn_Click"/>
                                     <Button x:Name="BackupBtn" Content="Create Backup" Style="{DynamicResource AccentButton}" Width="160" Click="BackupBtn_Click"/>
                                 </StackPanel>

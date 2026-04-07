@@ -13,15 +13,17 @@ using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using Microsoft.Win32;
-using UmbrellaSpoofer.Services;
+using UmbrellaCore;
+using UmbrellaCore.Models;
 using UmbrellaSpoofer.Data;
+using UmbrellaSpoofer.Services;
 
 namespace UmbrellaSpoofer.UI
 {
     public partial class MainWindow : Window
     {
         private readonly SqliteStore store;
-        private readonly SystemInfoService sys;
+        private readonly SystemInfo sys;
         private Dictionary<string, string>? masked;
         private readonly DispatcherTimer autoBackupTimer = new DispatcherTimer();
         private readonly DispatcherTimer autoRefreshTimer = new DispatcherTimer();
@@ -37,7 +39,7 @@ namespace UmbrellaSpoofer.UI
             SetWindowIcon();
             store = new SqliteStore();
             store.EnsureCreated();
-            sys = new SystemInfoService();
+            sys = new SystemInfo();
             backupFolder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "UmbrellaSpoofer", "Backups");
             Directory.CreateDirectory(backupFolder);
             BackupFolderText.Text = $"Backup folder: {backupFolder}";
@@ -56,6 +58,16 @@ namespace UmbrellaSpoofer.UI
             LoadSystemInfo();
             LoadNetworkAdapters();
             Log("Umbrella Spoofer initialized");
+            
+            if (sys.IsDriverConnected())
+            {
+                Log("Kernel driver connection established (Ring 0 access active)");
+            }
+            else
+            {
+                Log("Warning: Kernel driver not detected. Some low-level spoofing may be restricted.");
+            }
+            
             Log("System ready for inventory tracking operations");
             
             this.Focus();
@@ -201,36 +213,181 @@ namespace UmbrellaSpoofer.UI
                 Log("Generate preview skipped: no system data available");
                 return;
             }
+
             masked = new Dictionary<string, string>();
+
             foreach (var r in rows)
             {
-                var v = GenerateRandomIdentifier(r.Key, r.Current);
-                masked[r.Key] = v;
-                store.AddHistory(r.Key, v);
-                r.Masked = v;
+                var generated = GenerateRandomIdentifier(r.Key, r.Current);
+                masked[r.Key] = generated;
+                store.AddHistory(r.Key, generated);
+                r.Masked = generated;
                 r.Status = "Generated";
             }
+
             CheckerGrid.ItemsSource = null;
             CheckerGrid.ItemsSource = rows;
+            UpdateLastSpoofDisplay();
             Log("Generated randomized tracking identifiers");
             Log("Identifiers ready for system inventory tracking");
         }
 
+        static readonly System.Random Rng = new System.Random();
+
         static string GenerateRandomIdentifier(string key, string original)
         {
+            return GenerateSpoofedValue(key, original);
+        }
+
+        static string GenerateSpoofedValue(string key, string original)
+        {
+            if (key.Contains("MAC_Addresses")) return GenerateRandomMacAddress();
+            if (key.Contains("MachineGuid")) return GenerateSpoofedGuid(original);
+            if (key.Contains("Volume_Serials")) return GenerateSpoofedVolumeSerials(original);
+            if (key.Contains("Disk_Serials")) return GenerateSpoofedMultiField(original, GenerateSpoofedDiskSerial);
+            if (key.Contains("GPU_Identifiers")) return GenerateSpoofedMultiField(original, GenerateSpoofedPnpId);
+            if (key.Contains("CPU_Identifier")) return GenerateSpoofedMultiField(original, GenerateSpoofedCpuId);
+            if (key.Contains("RAM_Serials")) return GenerateSpoofedMultiField(original, GenerateSpoofedRamSerial);
+            if (key.Contains("Monitor_Serials")) return GenerateSpoofedMultiField(original, GenerateSpoofedMonitorSerial);
+            if (key.Contains("EFI_Boot")) return GenerateSpoofedPath(original);
+            if (key.Contains("BIOS_Serial")) return GetStylePreservedRandom(original);
+            if (key.Contains("BaseBoard_Serial")) return GetStylePreservedRandom(original);
+            if (key.Contains("EFI_Version")) return GetStylePreservedRandom(original);
+            if (key.Contains("TPM_Identity")) return GenerateComponentSerial("TPM", 20);
+            return GetStylePreservedRandom(original);
+        }
+
+        /// <summary>
+        /// Splits comma-separated multi-values, generates a spoofed value per item, rejoins.
+        /// </summary>
+        static string GenerateSpoofedMultiField(string original, Func<string, string> generator)
+        {
+            if (string.IsNullOrEmpty(original)) return generator(original);
+
+            var parts = original.Split(new[] { ", " }, StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length <= 1) return generator(original);
+
+            var spoofed = parts.Select(p => generator(p.Trim())).ToList();
+            return string.Join(", ", spoofed);
+        }
+
+        static string GenerateSpoofedGuid(string original) => Guid.NewGuid().ToString();
+
+        static string GenerateRandomMacAddress()
+        {
             var rng = RandomNumberGenerator.Create();
-            
-            return key switch
+            var bytes = new byte[6];
+            rng.GetBytes(bytes);
+            bytes[0] = (byte)((bytes[0] & 0xFE) | 0x02); // locally administered
+            return string.Join(":", bytes.Select(b => b.ToString("X2")));
+        }
+
+        static string GenerateSpoofedVolumeSerials(string original)
+        {
+            if (string.IsNullOrEmpty(original)) return original;
+            var parts = original.Split(new[] { ", " }, StringSplitOptions.RemoveEmptyEntries);
+            return string.Join(", ", parts.Select(p =>
             {
-                "MachineGuid" => GenerateGuidLikeIdentifier(original),
-                "BIOS_Serial" => GenerateSerialLikeIdentifier(original),
-                "BaseBoard_Serial" => GenerateSerialLikeIdentifier(original),
-                "EFI_Version" => GenerateSerialLikeIdentifier(original),
-                "Monitor_Serials" => GenerateMonitorLikeIdentifier(original),
-                "RAM_Serials" => GenerateMultipleSerialsLikeIdentifier(original),
-                "MAC_Addresses" => GenerateMacLikeIdentifier(original),
-                _ => GenerateGenericIdentifier(original)
-            };
+                var match = System.Text.RegularExpressions.Regex.Match(p, @"^([A-Z])::", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                if (match.Success)
+                    return $"{match.Groups[1].Value}::{GenerateRandomHex(8)}";
+                return GenerateRandomHex(8);
+            }));
+        }
+
+        static string GenerateSpoofedDiskSerial(string original)
+        {
+            if (string.IsNullOrEmpty(original)) return GenerateComponentSerial("DSK", 16);
+            return GetStylePreservedRandom(original);
+        }
+
+        static string GenerateSpoofedPnpId(string original)
+        {
+            if (string.IsNullOrEmpty(original)) return GenerateComponentSerial("GPU", 16);
+            var spo = original;
+            var matchVen = System.Text.RegularExpressions.Regex.Match(original, @"VEN_([0-9A-Fa-f]{4})");
+            var matchDev = System.Text.RegularExpressions.Regex.Match(original, @"DEV_([0-9A-Fa-f]{4})");
+            if (matchVen.Success) spo = spo.Replace(matchVen.Value, "VEN_" + GenerateRandomHex(4));
+            if (matchDev.Success) spo = spo.Replace(matchDev.Value, "DEV_" + GenerateRandomHex(4));
+            return spo;
+        }
+
+        static string GenerateSpoofedCpuId(string original)
+        {
+            if (string.IsNullOrEmpty(original)) return GenerateRandomHex(16);
+            return GetStylePreservedRandom(original);
+        }
+
+        static string GenerateSpoofedRamSerial(string original)
+        {
+            if (string.IsNullOrEmpty(original)) return GenerateRandomHex(8);
+            return GetStylePreservedRandom(original);
+        }
+
+        static string GenerateSpoofedMonitorSerial(string original)
+        {
+            if (string.IsNullOrEmpty(original)) return GenerateComponentSerial("MON", 12);
+            return GetStylePreservedRandom(original);
+        }
+
+        static string GenerateSpoofedPath(string original)
+        {
+            if (string.IsNullOrWhiteSpace(original)) return "\\\\Device\\\\Harddisk0\\\\Partition1";
+            var match = System.Text.RegularExpressions.Regex.Match(original, @"(?i)(Harddisk)(\d+)");
+            if (match.Success)
+            {
+                int currentDisk = int.Parse(match.Groups[2].Value);
+                int newDisk;
+                do { newDisk = Rng.Next(0, 5); } while (newDisk == currentDisk);
+                original = System.Text.RegularExpressions.Regex.Replace(original, @"(?i)Harddisk\d+", $"Harddisk{newDisk}");
+            }
+            match = System.Text.RegularExpressions.Regex.Match(original, @"(?i)(Partition)(\d+)");
+            if (match.Success)
+            {
+                int currentPart = int.Parse(match.Groups[2].Value);
+                int newPart;
+                do { newPart = Rng.Next(0, 5); } while (newPart == currentPart);
+                original = System.Text.RegularExpressions.Regex.Replace(original, @"(?i)Partition\d+", $"Partition{newPart}");
+            }
+            return original;
+        }
+
+        static string GetStylePreservedRandom(string original)
+        {
+            if (string.IsNullOrEmpty(original)) return GenerateRandomHex(10);
+            var rng = RandomNumberGenerator.Create();
+            var sb = new System.Text.StringBuilder();
+            foreach (char c in original)
+            {
+                var bytes = new byte[1];
+                rng.GetBytes(bytes);
+                int randVal = bytes[0];
+                if (char.IsDigit(c))
+                    sb.Append((randVal % 10).ToString());
+                else if (char.IsUpper(c))
+                    sb.Append((char)('A' + (randVal % 26)));
+                else if (char.IsLower(c))
+                    sb.Append((char)('a' + (randVal % 26)));
+                else
+                    sb.Append(c);
+            }
+            return sb.ToString();
+        }
+
+        static string GenerateRandomHex(int length)
+        {
+            var rng = RandomNumberGenerator.Create();
+            const string chars = "ABCDEF0123456789";
+            var bytes = new byte[length];
+            rng.GetBytes(bytes);
+            return new string(bytes.Select(b => chars[b % chars.Length]).ToArray());
+        }
+
+        static string GenerateComponentSerial(string prefix, int randomLength)
+        {
+            var cleanPrefix = new string((prefix ?? string.Empty).Where(char.IsLetterOrDigit).ToArray()).ToUpperInvariant();
+            var tail = GenerateRandomHex(Math.Max(randomLength, 4));
+            return $"{cleanPrefix}-{tail}";
         }
 
         private void ApplyBtn_Click(object sender, RoutedEventArgs e)
@@ -241,110 +398,137 @@ namespace UmbrellaSpoofer.UI
                 return;
             }
 
-            var spoofValues = new Dictionary<string, string>();
-            
-            if (HwidToggle?.IsChecked == true && masked.ContainsKey("MachineGuid"))
-                spoofValues["MachineGuid"] = masked["MachineGuid"];
-            
-            if (BiosToggle?.IsChecked == true && masked.ContainsKey("BIOS_Serial"))
-                spoofValues["BIOS_Serial"] = masked["BIOS_Serial"];
-            
-            if (MacToggle?.IsChecked == true && masked.ContainsKey("MAC_Addresses"))
-                spoofValues["MAC_Addresses"] = masked["MAC_Addresses"];
-            
-            if (BiosToggle?.IsChecked == true && masked.ContainsKey("BaseBoard_Serial"))
-                spoofValues["BaseBoard_Serial"] = masked["BaseBoard_Serial"];
-            
-            if (EfiToggle?.IsChecked == true && masked.ContainsKey("EFI_Version"))
-                spoofValues["EFI_Version"] = masked["EFI_Version"];
-            
-            if (MonitorToggle?.IsChecked == true && masked.ContainsKey("Monitor_Serials"))
-                spoofValues["Monitor_Serials"] = masked["Monitor_Serials"];
-            
-            if (RamToggle?.IsChecked == true && masked.ContainsKey("RAM_Serials"))
-                spoofValues["RAM_Serials"] = masked["RAM_Serials"];
-            
-            if (DiskToggle?.IsChecked == true && masked.ContainsKey("Disk_Serials"))
-                spoofValues["Disk_Serials"] = masked["Disk_Serials"];
-            
-            if (GpuToggle?.IsChecked == true && masked.ContainsKey("GPU_Identifiers"))
-                spoofValues["GPU_Identifiers"] = masked["GPU_Identifiers"];
-            
-            if (VolumeToggle?.IsChecked == true && masked.ContainsKey("Volume_Serials"))
-                spoofValues["Volume_Serials"] = masked["Volume_Serials"];
-            
-            if (TpmToggle?.IsChecked == true && masked.ContainsKey("TPM_Identity"))
-                spoofValues["TPM_Identity"] = masked["TPM_Identity"];
-            
-            if (EfiBootToggle?.IsChecked == true && masked.ContainsKey("EFI_Boot"))
-                spoofValues["EFI_Boot"] = masked["EFI_Boot"];
-            
-            if (ArpToggle?.IsChecked == true && masked.ContainsKey("ARP_Cache"))
-                spoofValues["ARP_Cache"] = masked["ARP_Cache"];
-
-            if (spoofValues.Count == 0)
-            {
-                MessageBox.Show("Select at least one component to spoof.", "Notice", MessageBoxButton.OK, MessageBoxImage.Information);
-                Log("Apply spoof skipped: no components selected");
-                return;
-            }
-
-            if (MacToggle?.IsChecked == true && AdapterCombo?.SelectedItem == null)
-            {
-                MessageBox.Show("Select a network adapter for MAC spoofing.", "Notice", MessageBoxButton.OK, MessageBoxImage.Information);
-                Log("Apply spoof skipped: no adapter selected for MAC spoofing");
-                return;
-            }
-
             string? macInterfaceIndex = null;
             if (AdapterCombo?.SelectedItem is NetworkAdapter selectedAdapter)
                 macInterfaceIndex = selectedAdapter.InterfaceIndex;
 
-            var mode = ModeCombo.SelectedIndex == 0 ? "Temporary" : "Permanent";
-            if (mode == "Temporary")
+            bool success;
+            if (sys.IsDriverConnected())
             {
-                var current = sys.GetAll();
-                var payload = BuildTempRestorePayload(current, AdapterCombo?.SelectedItem as NetworkAdapter);
-                if (payload.Values.Count == 0)
+                success = sys.SpoofAll(masked, MacToggle?.IsChecked == true, macInterfaceIndex);
+                if (success)
                 {
-                    MessageBox.Show("Temporary mode needs at least one reversible component.", "Notice", MessageBoxButton.OK, MessageBoxImage.Information);
-                    Log("Temporary spoof skipped: no reversible components");
-                    return;
+                    // Reload system info to show new values from driver
+                    LoadSystemInfo();
+                    if (CheckerGrid.ItemsSource is List<Row> rows)
+                    {
+                        foreach (var r in rows)
+                        {
+                            if (masked.TryGetValue(r.Key, out var maskedVal))
+                            {
+                                r.Current = maskedVal;
+                                r.Masked = maskedVal;
+                                r.Status = "Applied";
+                            }
+                        }
+                        CheckerGrid.ItemsSource = null;
+                        CheckerGrid.ItemsSource = rows;
+                    }
                 }
-                var restorePath = SaveTempRestorePayload(payload);
-                if (string.IsNullOrWhiteSpace(restorePath) || !ScheduleTempRestore(restorePath))
-                {
-                    MessageBox.Show("Temporary mode could not schedule a restore on reboot. Spoof canceled.", "Notice", MessageBoxButton.OK, MessageBoxImage.Warning);
-                    Log("Temporary spoof canceled: failed to schedule restore");
-                    return;
-                }
-            }
-
-            var spoofMac = MacToggle?.IsChecked == true;
-            var success = sys.SpoofAll(spoofValues, spoofMac, macInterfaceIndex);
-
-            foreach (var kv in masked)
-                store.AddBackup(kv.Key, kv.Value, mode);
-
-            StoreTrackingIdentifiersInRegistry(masked);
-            
-            if (success)
-            {
-                Log($"Applied {mode} spoofing to {spoofValues.Count} components");
-                Log("System spoofing active - Hardware identifiers modified");
-                MessageBox.Show($"Hardware spoofing applied successfully to {spoofValues.Count} components.\n\nMode: {mode}\n\nSystem will appear with new identifiers.", "Spoofing Applied", MessageBoxButton.OK, MessageBoxImage.Information);
             }
             else
             {
-                Log("Spoofing partially failed - Some components may not have been modified");
-                MessageBox.Show("Spoofing partially completed. Some components may not have been modified due to system restrictions.\n\nRun as Administrator for full functionality.", "Partial Success", MessageBoxButton.OK, MessageBoxImage.Warning);
+                success = sys.SpoofAll(masked, MacToggle?.IsChecked == true, macInterfaceIndex);
+                if (success && CheckerGrid.ItemsSource is List<Row> rows2)
+                {
+                    foreach (var r in rows2)
+                    {
+                        if (masked.TryGetValue(r.Key, out var maskedVal))
+                        {
+                            r.Current = maskedVal;
+                            r.Masked = maskedVal;
+                            r.Status = "Applied";
+                        }
+                    }
+                    CheckerGrid.ItemsSource = null;
+                    CheckerGrid.ItemsSource = rows2;
+                }
+            }
+
+            if (success)
+            {
+                MessageBox.Show("Identifiers sent to kernel driver successfully.", "Success", MessageBoxButton.OK, MessageBoxImage.Information);
+                Log("Hardware identifiers spoofed successfully via Kernel Driver.");
+                UpdateLastSpoofDisplay();
+            }
+            else
+            {
+                MessageBox.Show("Failed to communicate with Kernel Driver. Ensure the driver is running.", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                Log("Failed to apply spoofing via Kernel Driver.");
             }
         }
 
         private void QuickSpoofBtn_Click(object sender, RoutedEventArgs e)
         {
-            MainTabs.SelectedIndex = 1;
-            Log("Quick Spoof initiated - Redirected to Spoofer configuration");
+            Log("Quick Spoof: Generating and applying new identifiers...");
+
+            if (sys.IsDriverConnected())
+            {
+                var result = sys.SpoofAll(masked ?? new Dictionary<string, string>(), false, null);
+                if (result)
+                {
+                    Log("Quick Spoof completed successfully via kernel driver");
+                    LoadSystemInfo();
+                    UpdateLastSpoofDisplay();
+                    MessageBox.Show("Hardware identifiers spoofed successfully via Kernel Driver.", "Success", MessageBoxButton.OK, MessageBoxImage.Information);
+                }
+                else
+                {
+                    Log("Quick Spoof failed.");
+                    MessageBox.Show("Quick spoof failed. Check driver status.", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                }
+                return;
+            }
+
+            // Fallback: legacy flow
+            GenerateBtn_Click(sender, e);
+            if (masked != null && masked.Count > 0)
+            {
+                ApplyBtn_Click(sender, e);
+                Log("Quick Spoof completed (legacy mode).");
+            }
+            else
+            {
+                Log("Quick Spoof aborted: identifier generation failed.");
+            }
+        }
+
+        private void RestoreOriginalsBtn_Click(object sender, RoutedEventArgs e)
+        {
+            if (!sys.IsDriverConnected())
+            {
+                MessageBox.Show("Kernel driver not detected. Cannot restore originals.", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                Log("Restore originals skipped: driver not connected");
+                return;
+            }
+
+            var confirm = MessageBox.Show(
+                "This will restore all original hardware identifiers from saved backups.\nContinue?",
+                "Confirm Restore",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Question);
+            if (confirm != MessageBoxResult.Yes) return;
+
+            try
+            {
+                var result = sys.RestoreAll();
+                if (result)
+                {
+                    Log("All original hardware identifiers restored");
+                    LoadSystemInfo();
+                    MessageBox.Show("Original identifiers restored successfully.", "Success", MessageBoxButton.OK, MessageBoxImage.Information);
+                }
+                else
+                {
+                    Log("Restore originals returned no results");
+                    MessageBox.Show("No original values available to restore.", "Notice", MessageBoxButton.OK, MessageBoxImage.Information);
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Failed to restore originals: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                Log($"Restore originals failed: {ex.Message}");
+            }
         }
 
         private void ViewSerialsBtn_Click(object sender, RoutedEventArgs e)
@@ -356,7 +540,7 @@ namespace UmbrellaSpoofer.UI
             if (button != null)
             {
                 var originalContent = button.Content;
-                button.Content = "✓ Viewed";
+                button.Content = "Viewed";
                 button.IsEnabled = false;
 
                 System.Windows.Threading.DispatcherTimer timer = new System.Windows.Threading.DispatcherTimer();
@@ -575,22 +759,22 @@ namespace UmbrellaSpoofer.UI
                     switch (kv.Key)
                     {
                         case "MachineGuid":
-                            ok = !string.IsNullOrWhiteSpace(value) && sys.SpoofMachineGuid(value);
+                            ok = !string.IsNullOrWhiteSpace(value) && !string.IsNullOrEmpty(sys.SpoofMachineGuid(value));
                             break;
                         case "BIOS_Serial":
-                            ok = !string.IsNullOrWhiteSpace(value) && sys.SpoofBiosSerial(value);
+                            ok = !string.IsNullOrWhiteSpace(value) && !string.IsNullOrEmpty(sys.SpoofBiosSerial(value));
                             break;
                         case "BaseBoard_Serial":
-                            ok = !string.IsNullOrWhiteSpace(value) && sys.SpoofBaseBoardSerial(value);
+                            ok = !string.IsNullOrWhiteSpace(value) && !string.IsNullOrEmpty(sys.SpoofBaseBoardSerial(value));
                             break;
                         case "EFI_Version":
-                            ok = !string.IsNullOrWhiteSpace(value) && sys.SpoofEfiVersion(value);
+                            ok = !string.IsNullOrWhiteSpace(value) && !string.IsNullOrEmpty(sys.SpoofEfiVersion(value));
                             break;
                         case "Monitor_Serials":
-                            ok = !string.IsNullOrWhiteSpace(value) && sys.SpoofMonitorSerials(value);
+                            ok = !string.IsNullOrWhiteSpace(value) && !string.IsNullOrEmpty(sys.SpoofMonitorSerials(value));
                             break;
                         case "RAM_Serials":
-                            ok = !string.IsNullOrWhiteSpace(value) && sys.SpoofRamSerials(value);
+                            ok = !string.IsNullOrWhiteSpace(value) && !string.IsNullOrEmpty(sys.SpoofRamSerials(value));
                             break;
                         case "CapturedAt":
                         case "MAC_Addresses":
@@ -661,9 +845,9 @@ namespace UmbrellaSpoofer.UI
             };
         }
 
-        SystemInfoService.BackupOptions GetBackupOptions()
+        BackupOptions GetBackupOptions()
         {
-            return new SystemInfoService.BackupOptions
+            return new BackupOptions
             {
                 MachineGuid = BackupMachineGuid.IsChecked == true,
                 BiosSerial = BackupBios.IsChecked == true,
@@ -676,13 +860,13 @@ namespace UmbrellaSpoofer.UI
             };
         }
 
-        static bool HasAnyBackupOption(SystemInfoService.BackupOptions options)
+        static bool HasAnyBackupOption(BackupOptions options)
         {
             return options.MachineGuid || options.BiosSerial || options.BaseBoardSerial || options.EfiVersion ||
                    options.MonitorSerials || options.RamSerials || options.MacAddresses || options.RegistryEdid;
         }
 
-        void WriteBackupFile(string filePath, SystemInfoService.BackupOptions options)
+        void WriteBackupFile(string filePath, BackupOptions options)
         {
             var snapshot = sys.GetBackupSnapshot(options);
             var json = System.Text.Json.JsonSerializer.Serialize(snapshot, new JsonSerializerOptions { WriteIndented = true });
@@ -847,11 +1031,6 @@ namespace UmbrellaSpoofer.UI
             }
         }
 
-        static string GenerateGuidLikeIdentifier(string original)
-        {
-            return Guid.NewGuid().ToString("D").ToUpper();
-        }
-
         TempRestorePayload BuildTempRestorePayload(Dictionary<string, string> current, NetworkAdapter? adapter)
         {
             var values = new Dictionary<string, string>();
@@ -909,89 +1088,6 @@ namespace UmbrellaSpoofer.UI
                 return false;
             }
         }
-
-        static string GenerateSerialLikeIdentifier(string original)
-        {
-            var rng = RandomNumberGenerator.Create();
-            var targetLength = string.IsNullOrEmpty(original) ? 12 : original.Length;
-            const string chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
-            var bytes = new byte[targetLength];
-            rng.GetBytes(bytes);
-            
-            var result = new char[targetLength];
-            for (int i = 0; i < targetLength; i++)
-            {
-                result[i] = chars[bytes[i] % chars.Length];
-            }
-            
-            return new string(result);
-        }
-
-        static string GenerateMultipleSerialsLikeIdentifier(string original)
-        {
-            if (string.IsNullOrEmpty(original))
-                return GenerateSerialLikeIdentifier(original);
-            var serials = original.Split(',');
-            if (serials.Length == 1)
-                return GenerateSerialLikeIdentifier(original);
-            var generatedSerials = new List<string>();
-            foreach (var serial in serials)
-            {
-                var cleanSerial = serial.Trim();
-                if (!string.IsNullOrEmpty(cleanSerial))
-                {
-                    generatedSerials.Add(GenerateSerialLikeIdentifier(cleanSerial));
-                }
-            }
-            
-            return string.Join(",", generatedSerials);
-        }
-
-        static string GenerateMacLikeIdentifier(string original)
-        {
-            var rng = RandomNumberGenerator.Create();
-            var bytes = new byte[6];
-            rng.GetBytes(bytes);
-            bytes[0] = (byte)((bytes[0] & 0xFE) | 0x02);
-            
-            return string.Format("{0:X2}:{1:X2}:{2:X2}:{3:X2}:{4:X2}:{5:X2}",
-                bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5]);
-        }
-
-        static string GenerateMonitorLikeIdentifier(string original)
-        {
-            var rng = RandomNumberGenerator.Create();
-            const string chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-";
-            var targetLength = string.IsNullOrEmpty(original) ? 15 : Math.Min(original.Length, 20);
-            var bytes = new byte[targetLength];
-            rng.GetBytes(bytes);
-            
-            var result = new char[targetLength];
-            for (int i = 0; i < targetLength; i++)
-            {
-                result[i] = chars[bytes[i] % chars.Length];
-            }
-            
-            return new string(result);
-        }
-
-        static string GenerateGenericIdentifier(string original)
-        {
-            var rng = RandomNumberGenerator.Create();
-            var targetLength = string.IsNullOrEmpty(original) ? 12 : original.Length;
-            const string chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
-            var bytes = new byte[targetLength];
-            rng.GetBytes(bytes);
-            
-            var result = new char[targetLength];
-            for (int i = 0; i < targetLength; i++)
-            {
-                result[i] = chars[bytes[i] % chars.Length];
-            }
-            
-            return new string(result);
-        }
-
 
         public class Row
         {

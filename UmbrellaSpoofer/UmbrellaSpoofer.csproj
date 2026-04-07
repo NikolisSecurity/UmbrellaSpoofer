@@ -12,12 +12,19 @@
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.Data.Sqlite" Version="8.0.0" />
-    <PackageReference Include="System.Management" Version="8.0.0" />
     <PackageReference Include="System.Drawing.Common" Version="8.0.0" />
   </ItemGroup>
   <ItemGroup>
     <Content Include="assets\**\*.*">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
+  </ItemGroup>
+  <ItemGroup Condition="Exists('..\UmbrellaCore\UmbrellaCore.csproj')">
+    <ProjectReference Include="..\UmbrellaCore\UmbrellaCore.csproj" />
+  </ItemGroup>
+  <ItemGroup Condition="!Exists('..\UmbrellaCore\UmbrellaCore.csproj')">
+    <Reference Include="UmbrellaCore">
+      <HintPath>lib\UmbrellaCore.dll</HintPath>
+    </Reference>
   </ItemGroup>
 </Project>

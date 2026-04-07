@@ -1,6 +1,7 @@
 using System;
 using System.Threading.Tasks;
 using System.Windows;
+using UmbrellaCore;
 using UmbrellaSpoofer.Data;
 using UmbrellaSpoofer.Services;
 
@@ -17,7 +18,7 @@ namespace UmbrellaSpoofer
             if (e.Args.Length >= 2 && e.Args[0].Equals("--restore-temp", StringComparison.OrdinalIgnoreCase))
             {
                 var path = e.Args[1];
-                var sys = new SystemInfoService();
+                var sys = new SystemInfo();
                 sys.RestoreFromPayloadFile(path);
                 Shutdown();
                 return;

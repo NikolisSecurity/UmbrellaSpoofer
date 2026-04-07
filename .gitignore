@@ -1,0 +1,34 @@
+# Build output
+**/bin/
+**/obj/
+
+# IDE
+.vs/
+*.suo
+*.user
+*.userprefs
+
+# Rider
+.idea/
+
+# OS
+Thumbs.db
+Desktop.ini
+
+# Misc
+*.log
+*.tmp
+*.rar
+*.zip
+
+# Kernel driver build artifacts
+**/*.sys
+**/*.pdb
+**/*.obj
+**/*.tlog/
+**/*.recipe
+**/*.*.tlog/
+build_win/
+**/vc145.pdb
+.omc/
+*.bak

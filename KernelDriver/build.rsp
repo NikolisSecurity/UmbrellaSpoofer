@@ -1,0 +1,9 @@
+UmbrellaKernelDriver.vcxproj
+/p:Configuration=Release
+/p:Platform=x64
+/p:SpectreMitigation=false
+/p:SpectreMitigationCheck=false
+/p:SignMode=Off
+/p:VisualStudioVersion=17.0
+/v:minimal
+/nologo
